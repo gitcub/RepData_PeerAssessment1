@@ -1,25 +1,163 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+author: "Rachel Stephens"
+date: "December 18, 2015"
+output:
+    html_document:
+        keep_md: true
 ---
 
+```{r, echo=FALSE}
+setwd("/Users/rachelstephens/Dropbox/School/Coursera/Reproducible Research/Project 1")
+```
 
 ## Loading and preprocessing the data
 
+### Loading data
+The data records steps taken by subjects as measured by personal fitness devices. 
 
+```{r access and load data}
+fileURL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(fileURL, destfile = "dataset.zip", method = "curl")
+unzip("dataset.zip")
+unlink("dataset.zip")
+data <- read.csv("activity.csv")
+```
 
-## What is mean total number of steps taken per day?
+There are `r nrow(data)` observations and `r ncol(data)` variables:  
+- **steps:** number of steps taken during the interval  
+- **date:** date of measurement  
+- **interval:** 5-minute interval identifier  
 
+### Processing data
 
+```{r date and time formatting}
+data$date <- as.Date(data$date, "%Y-%m-%d")
+data$interval <- as.factor(data$interval)
+```
+
+## What is the mean total number of steps taken per day?
+
+### Total steps
+```{r step count}
+stepsTotal <- aggregate(steps~date, data = data, FUN = sum, na.rm = TRUE)
+sum(stepsTotal$steps)
+```
+
+The participants took a total of `r sum(stepsTotal$steps)` steps. 
+
+### Step distribution by day
+```{r histogram}
+hist(x = stepsTotal$steps, main = "Distribution of Total Daily Steps", xlab = "Total Steps by Day")
+```
+
+The distribution of total steps taken by day is relatively normal, with a center of `r prettyNum(mean(stepsTotal$steps, na.rm = TRUE))` and a standard deviation of `r sd(stepsTotal$steps, na.rm = TRUE)`.
+
+### Average total daily steps
+```{r step average}
+stepsMean <- mean(stepsTotal$steps, na.rm = TRUE)
+stepsMean
+stepsMedian <- median(stepsTotal$steps, na.rm = TRUE)
+stepsMedian
+```
+
+The mean total steps taken per day is `r prettyNum(stepsMean)`.
+The median total steps taken per day is `r stepsMedian`.
 
 ## What is the average daily activity pattern?
+```{r timeseries}
+# isolate variables for plot
+stepsInt <- aggregate(steps~interval, data = data, FUN = mean, na.rm = TRUE) 
 
+plot(stepsInt$interval, stepsInt$steps, type = "l", main = "Average Steps by 5-Minute Interval", xlab = "5-Minute Interval Identifier", ylab = "Average Steps")
+```
 
+Because we changed the interval variable to be a factor instead of a continuous varible, the time series shows individual points for each interval rather than a continuous line. This more accurately conveys the hour/minute nature of the variable.  
+
+From this plot, we can see that activity spikes between the 800th and 1000th interval identifiers, or roughly between 8:00 AM and 10:00 AM.
+
+```{r activity max}
+stepsMax <- stepsInt[stepsInt$steps == max(stepsInt$steps), ]
+stepsMax
+```
+
+The most active time interval is `r stepsMax$interval` with an average of `r stepsMax$steps` steps.
 
 ## Imputing missing values
 
+### Missing values
+```{r missing values}
+indexNA <- is.na(data$steps)
+sum(indexNA)
+```
 
+There are `r sum(indexNA)` missing values in the data. `r round((sum(indexNA)/nrow(data))*100, digits = 2)`% of data is missing.
+
+### Impute missing values using time interval mean
+
+```{r impute}
+# create a new data frame for imputing values
+imputeData <- data
+
+# identify missing data and impute values using the mean for that 5-minute time interval
+indexMeans <- match(imputeData[indexNA, ]$interval, stepsInt$interval)
+imputeData[indexNA, ]$steps <- stepsInt[indexMeans, ]$steps
+```
+
+### Total steps with imputed values
+```{r step count imputed}
+stepsTotalImp <- aggregate(steps~date, data = imputeData, FUN = sum, na.rm = TRUE)
+sum(stepsTotalImp$steps)
+```
+
+With imputed values, the participants took a total of `r prettyNum(sum(stepsTotalImp$steps))` steps. 
+
+Imputing values for missing data increased the number of total steps by `r ((sum(stepsTotalImp$steps))/(sum(stepsTotal$steps))-1)*100`%
+
+### Step distribution by day with imputed values
+```{r histogram imputed}
+hist(x = stepsTotalImp$steps, main = "Distribution of Total Daily Steps", xlab = "Total Steps by Day")
+```
+
+The new distribution of total steps taken by day is still relatively normal, with a center of `r prettyNum(mean(stepsTotalImp$steps, na.rm = TRUE))` and a standard deviation of `r sd(stepsTotalImp$steps, na.rm = TRUE)`.
+
+### Average of imputed daily steps
+```{r step average imputed}
+stepsMeanImp <- mean(stepsTotalImp$steps, na.rm = TRUE)
+stepsMeanImp
+stepsMedianImp <- median(stepsTotalImp$steps, na.rm = TRUE)
+stepsMedianImp
+```
+
+The mean total steps taken per day is `r prettyNum(stepsMeanImp)`.
+The median total steps taken per day is `r prettyNum(stepsMedianImp)`.
+
+Because we imputed values based on the time interval's average, this had little effect on our center. Had we used the daily average or some other method of imputing NA's, we would likely have seen greater impact to the mean and median calculations.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r weekdays}
+# create a new factor variable to denote weekdays and weekends
+imputeData["weekday"] <- factor(weekdays(imputeData$date) %in% c("Saturday", "Sunday"), labels = c("weekday", "weekend"))
+```
+
+First we need to create a factor variable to separate weekdays from weekends. Then we can plot both and compare. 
+
+```{r timeseries weekdays, fig.height = 7}
+par(mfrow = c(2, 1), mar = c(4, 4, 1, 1))
+
+# isolate variables for weekday plot
+dataWeekday <- imputeData[imputeData$weekday == "weekday", ]
+stepsIntWeekday <- aggregate(steps~interval, data = dataWeekday, FUN = mean, na.rm = TRUE) 
+
+# plot weekdays
+plot(stepsIntWeekday$interval, stepsIntWeekday$steps, type = "l", main = "Average Steps by 5-Minute Interval During Weekdays", xlab = "5-Minute Interval Identifier", ylab = "Average Steps")
+
+# isolate variables for weekend plot
+dataWeekend <- imputeData[imputeData$weekday == "weekend", ]
+stepsIntWeekend <- aggregate(steps~interval, data = dataWeekend, FUN = mean, na.rm = TRUE) 
+
+# plot weekends
+plot(stepsIntWeekend$interval, stepsIntWeekend$steps, type = "l", main = "Average Steps by 5-Minute Interval During Weekends", xlab = "5-Minute Interval Identifier", ylab = "Average Steps")
+```
+
+You see there is much more activity throughout the day on the weekeends than there is on weekdays. 
